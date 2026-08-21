@@ -702,33 +702,34 @@ elif pagina_scelta == "📝 Registro Transazioni":
         
         df_mostra = df_storico.copy()
         
+        # Filtri affiancati (3 colonne ora)
+        col_f1, col_f2, col_f3 = st.columns(3)
+        
         # Filtro Categoria
         tutte_le_cat = ["Tutte"] + sorted([c for c in df_storico["categoria"].dropna().unique().tolist() if str(c).strip()])
-        
-        # Mettiamo i due filtri affiancati per risparmiare spazio
-        col_filtro1, col_filtro2 = st.columns(2)
-        
-        with col_filtro1:
-            cat_selezionata = st.selectbox("Filtra per Categoria:", tutte_le_cat)
-            
-        # Applichiamo il primo filtro per sfoltire le sotto-categorie
+        with col_f1:
+            cat_selezionata = st.selectbox("Filtra per Categoria:", tutte_le_cat, key="f_cat")
         if cat_selezionata != "Tutte":
             df_mostra = df_mostra[df_mostra["categoria"] == cat_selezionata]
             
-        # Filtro Sotto Categoria (Dinamico: legge solo quelle della categoria scelta)
+        # Filtro Sotto Categoria
         tutte_le_sottocat = ["Tutte"] + sorted([c for c in df_mostra["sotto categoria"].dropna().unique().tolist() if str(c).strip()])
-        
-        with col_filtro2:
-            sottocat_selezionata = st.selectbox("Filtra per Sotto Categoria:", tutte_le_sottocat)
-            
-        # Applichiamo il secondo filtro
+        with col_f2:
+            sottocat_selezionata = st.selectbox("Filtra per Sotto Categoria:", tutte_le_sottocat, key="f_sub")
         if sottocat_selezionata != "Tutte":
             df_mostra = df_mostra[df_mostra["sotto categoria"] == sottocat_selezionata]
+            
+        # Filtro Tipologia (Conto)
+        tutte_le_tip = ["Tutte"] + sorted([t for t in df_storico["tipologia"].dropna().unique().tolist() if str(t).strip()])
+        with col_f3:
+            tip_selezionata = st.selectbox("Filtra per Tipologia:", tutte_le_tip, key="f_tip")
+        if tip_selezionata != "Tutte":
+            df_mostra = df_mostra[df_mostra["tipologia"] == tip_selezionata]
             
         # Mostriamo la tabella finale
         colonne_vista = [c for c in ["data", "flusso", "categoria", "sotto categoria", "descrizione", "tipologia", "importo"] if c in df_mostra.columns]
         st.dataframe(df_mostra.sort_values(by="data_dt", ascending=False)[colonne_vista], use_container_width=True)
-
+        
 # ==========================================
 #      PAGINA 5: IMPOSTAZIONI
 # ==========================================
