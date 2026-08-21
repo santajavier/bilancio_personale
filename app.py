@@ -616,21 +616,30 @@ elif pagina_scelta == "📝 Registro Transazioni":
     else:
         # 1. STRUMENTO DI MODIFICA / ELIMINAZIONE
         st.markdown("### ✏️ Modifica o Elimina Movimento")
-        st.write("Seleziona una transazione recente per correggerla o eliminarla.")
         
-        # Prepariamo un menu a tendina facile da leggere con la nuova formattazione
-        df_edit = df_storico.sort_values(by="data_dt", ascending=False).copy()
+        # Ricarichiamo sempre lo storico aggiornato
+        df_storico = carica_storico() 
         
-        # Nuova etichetta: Data | Sottocategoria | Descrizione | Importo
-        df_edit["etichetta"] = df_edit["data"].astype(str) + " | " + df_edit["sotto categoria"].astype(str) + " | " + df_edit["descrizione"].astype(str) + " | " + df_edit["importo"].astype(str) + " €"
-
-        # Limitiamo alle ultime 100 per non far esplodere la tendina
-        lista_opzioni = ["-- Seleziona transazione --"] + df_edit["etichetta"].head(100).tolist()
-        transazione_selezionata = st.selectbox("Cerca transazione:", lista_opzioni)
-        
-        if transazione_selezionata != "-- Seleziona transazione --":
-            riga_dati = df_edit[df_edit["etichetta"] == transazione_selezionata].iloc[0]
-            riga_gs = int(riga_dati["gs_row"])
+        if not df_storico.empty:
+            # Creiamo un ID univoco visibile nell'etichetta per evitare confusioni
+            df_edit = df_storico.sort_values(by="data_dt", ascending=False).copy()
+            df_edit["etichetta"] = (
+                df_edit["data"].astype(str) + " | " + 
+                df_edit["sotto categoria"].astype(str) + " | " + 
+                df_edit["descrizione"].astype(str) + " | " + 
+                df_edit["importo"].astype(str) + " €"
+            )
+            
+            # Usiamo un dizionario per mappare etichetta -> riga_gs (così è ultra-veloce)
+            mappa_transazioni = dict(zip(df_edit["etichetta"], df_edit["gs_row"]))
+            
+            lista_opzioni = ["-- Seleziona transazione --"] + df_edit["etichetta"].tolist()
+            transazione_selezionata = st.selectbox("Cerca transazione:", lista_opzioni)
+            
+            if transazione_selezionata != "-- Seleziona transazione --":
+                # Recuperiamo la riga esatta tramite la nostra mappa
+                riga_gs = mappa_transazioni[transazione_selezionata]
+                riga_dati = df_storico[df_storico["gs_row"] == riga_gs].iloc[0]
             
             if riga_dati["flusso"].lower() == "giroconto":
                 st.warning("💡 Stai modificando un Giroconto: ricordati che i giroconti hanno sempre 2 righe separate. Se elimini questa, ricordati di eliminare anche l'altra metà!")
