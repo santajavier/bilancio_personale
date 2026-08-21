@@ -94,19 +94,26 @@ if st.sidebar.button("🚪 Esci"):
 def carica_storico():
     dati = tab_storico.get_all_records()
     df_caricato = pd.DataFrame(dati)
-    if df_caricato.empty: return pd.DataFrame()
+    if df_caricato.empty:
+        return pd.DataFrame()
         
     df_caricato["gs_row"] = df_caricato.index + 2
     df_caricato.columns = df_caricato.columns.astype(str).str.strip().str.lower()
     
-    # FORZA LA CONVERSIONE DEI TIPI PRIMA DI QUALSIASI CALCOLO
+    # --- PULIZIA AGGRESSIVA DEI NUMERI ---
     for col in ["uscite", "entrate", "giroconti", "importo"]:
         if col in df_caricato.columns:
-            # Rimuoviamo eventuali simboli, spazi, sostituiamo virgola con punto
-            df_caricato[col] = df_caricato[col].astype(str).str.replace("€", "").str.replace(",", ".").str.strip()
-            df_caricato[col] = pd.to_numeric(df_caricato[col], errors='coerce').fillna(0.0)
-    
-    # Converti data
+            # 1. Convertiamo in stringa
+            # 2. Rimuoviamo tutto ciò che NON è numero, virgola o punto (es. rimuove '€', ' ', 'kg', ecc)
+            # 3. Sostituiamo la virgola col punto
+            serie = df_caricato[col].astype(str).str.replace(r'[^\d,.-]', '', regex=True)
+            serie = serie.str.replace(",", ".", regex=False)
+            
+            # 4. Convertiamo in numerico forzato
+            df_caricato[col] = pd.to_numeric(serie, errors="coerce").fillna(0.0)
+        else:
+            df_caricato[col] = 0.0
+            
     if "data" in df_caricato.columns:
         df_caricato["data_dt"] = pd.to_datetime(df_caricato["data"], format="%d/%m/%Y", errors="coerce")
         
@@ -729,7 +736,7 @@ elif pagina_scelta == "📝 Registro Transazioni":
         # Mostriamo la tabella finale
         colonne_vista = [c for c in ["data", "flusso", "categoria", "sotto categoria", "descrizione", "tipologia", "importo"] if c in df_mostra.columns]
         st.dataframe(df_mostra.sort_values(by="data_dt", ascending=False)[colonne_vista], use_container_width=True)
-        
+
 # ==========================================
 #      PAGINA 5: IMPOSTAZIONI
 # ==========================================
