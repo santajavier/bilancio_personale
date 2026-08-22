@@ -510,12 +510,19 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
         if df_prestiti.empty:
             st.success("Nessun prestito registrato finora. Tutto in regola!")
         else:
-            # 1. FUNZIONE ESTRAZIONE NOMI AGGIORNATA (Include l'azzeramento)
+            # 1. FUNZIONE ESTRAZIONE NOMI AGGIORNATA
             def estrai_nome_persona(sotto_cat):
                 testo = str(sotto_cat).lower().strip()
-                if testo.startswith("prestito soldi "): return testo.replace("prestito soldi ", "").title()
-                elif testo.startswith("soldi "): return testo.replace("soldi ", "").title()
-                elif testo.startswith("azzeramento soldi "): return testo.replace("azzeramento soldi ", "").title()
+                if testo.startswith("prestito soldi "): 
+                    return testo.replace("prestito soldi ", "").title()
+                elif testo.startswith("soldi "): 
+                    return testo.replace("soldi ", "").title()
+                elif "beni/servizi - soldi " in testo: 
+                    return testo.split("beni/servizi - soldi ")[-1].title()
+                elif testo.startswith("azzeramento soldi "): 
+                    return testo.replace("azzeramento soldi ", "").title()
+                elif testo.startswith("azzeramento prestiti "): 
+                    return testo.replace("azzeramento prestiti ", "").title()
                 return "Sconosciuto"
 
             df_prestiti["persona"] = df_prestiti["sotto categoria"].apply(estrai_nome_persona)
@@ -523,10 +530,28 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
             # Escludiamo eventuali errori di battitura non riconosciuti
             df_prestiti = df_prestiti[df_prestiti["persona"] != "Sconosciuto"]
             
-            # Calcolo variazione per singola riga
-            df_prestiti["variazione_credito"] = df_prestiti.apply(
-                lambda r: r["uscite"] if str(r["categoria"]).lower() == "prestiti" else -r["entrate"], axis=1
-            )
+            # 1.5 MOTORE INTELLIGENTE PER IL CALCOLO DEI SEGNI
+            def calcola_variazione(row):
+                sotto_cat = str(row["sotto categoria"]).lower().strip()
+                categoria = str(row["categoria"]).lower().strip()
+                
+                # GESTIONE AZZERAMENTI E RIENTRI
+                if sotto_cat.startswith("azzeramento") or categoria == "rientro prestiti":
+                    return float(row["uscite"]) - float(row["entrate"])
+                    
+                # GESTIONE PRESTITI NORMALI E CONDIVISI
+                uscite = float(row["uscite"])
+                if sotto_cat.startswith("prestito soldi "):
+                    # Li hai prestati TU -> Il tuo credito sale (+)
+                    return uscite
+                elif sotto_cat.startswith("soldi ") or "beni/servizi - soldi " in sotto_cat:
+                    # Li hanno anticipati LORO -> Il tuo debito sale (-)
+                    return -uscite
+                    
+                return float(row["uscite"]) - float(row["entrate"])
+
+            # Applichiamo la nuova regola matematica riga per riga
+            df_prestiti["variazione_credito"] = df_prestiti.apply(calcola_variazione, axis=1)
             
             # 2. MOTORE DI CALCOLO SALDI CON CHECKPOINT
             persone = df_prestiti["persona"].unique()
@@ -535,19 +560,20 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
             for persona in persone:
                 df_persona = df_prestiti[df_prestiti["persona"] == persona]
                 
-                # Cerco se c'è un "checkpoint" di azzeramento per questa persona
-                df_azzeramento = df_persona[df_persona["sotto categoria"].astype(str).str.lower().str.startswith("azzeramento soldi ")]
+                # Cerco se c'è un "checkpoint" di azzeramento (copre sia "azzeramento soldi" che "azzeramento prestiti")
+                condizione_azzeramento = df_persona["sotto categoria"].astype(str).str.lower().str.startswith("azzeramento")
+                df_azzeramento = df_persona[condizione_azzeramento]
                 
                 if not df_azzeramento.empty:
                     # Prendo il checkpoint più recente
                     ultima_rettifica = df_azzeramento.sort_values(by="data_dt", ascending=False).iloc[0]
                     data_rettifica = ultima_rettifica["data_dt"]
                     
-                    # Il nuovo punto di partenza diventa l'importo dell'azzeramento (es. 0€)
+                    # Il nuovo punto di partenza diventa l'importo dell'azzeramento
                     saldo_base = ultima_rettifica["variazione_credito"] 
                     
                     # Sommo solo le transazioni successive al checkpoint
-                    df_successive = df_persona[(df_persona["data_dt"] > data_rettifica) & (~df_persona["sotto categoria"].astype(str).str.lower().str.startswith("azzeramento soldi "))]
+                    df_successive = df_persona[(df_persona["data_dt"] > data_rettifica) & (~condizione_azzeramento)]
                     saldo = saldo_base + df_successive["variazione_credito"].sum()
                 else:
                     # Nessun checkpoint: calcolo lo storico completo
@@ -577,7 +603,6 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
             
             # Stampa i saldi di ogni persona
             for nome, saldo in saldi_finali.items():
-                # Se c'è un filtro attivo e il nome non è selezionato, salta al prossimo
                 if persone_selezionate and nome not in persone_selezionate:
                     continue
                     
@@ -601,7 +626,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                 .sort_values(by="data_dt", ascending=False), 
                 use_container_width=True
             )
-
+            
 # ==========================================
 #      PAGINA 4: REGISTRO TRANSAZIONI
 # ==========================================
