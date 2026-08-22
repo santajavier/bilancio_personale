@@ -318,8 +318,11 @@ if pagina_scelta == "💸 Nuova Transazione":
                 elif flusso_input == "Incasso":
                     entrate_calc = imp_pulito
                     importo_netto = imp_pulito
-                elif flusso_input == "Allineamento patrimonio":
+                elif flusso_input == "Allineamento saldo conto":
                     # L'allineamento non tocca uscite ed entrate (così non sballa i grafici)
+                    importo_netto = imp_pulito
+                elif flusso_input == "Allineamento saldo prestiti":
+                    # L'allineamento non tocca uscite ed entrate (così non sballa i grafici)    
                     importo_netto = imp_pulito
                 else:
                     importo_netto = 0.0
