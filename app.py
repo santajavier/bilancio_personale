@@ -490,9 +490,8 @@ elif pagina_scelta == "📊 Dashboard Statistiche":
             
         colonne_vista = [c for c in ["data", "flusso", "categoria", "sotto categoria", "descrizione", "tipologia", "importo"] if c in df_mostra.columns]
         st.dataframe(df_mostra.sort_values(by="data_dt", ascending=False)[colonne_vista], use_container_width=True)
-
 # ==========================================
-#      PAGINA 3: GESTIONE PRESTITI
+#       PAGINA 3: GESTIONE PRESTITI
 # ==========================================
 elif pagina_scelta == "🤝 Gestione Prestiti":
     st.title("Bilancio Personale")
@@ -503,61 +502,44 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
     if df_storico.empty:
         st.info("Nessun dato presente nel database.")
     else:
-        # Isoliamo solo le categorie relative ai prestiti
-        cat_prestiti = ["prestiti", "rientro prestiti"]
-        df_prestiti = df_storico[df_storico["categoria"].astype(str).str.lower().isin(cat_prestiti)].copy()
+        # 1. FILTRO AMPLIATO
+        # Prendiamo la categoria "prestiti" OPPURE qualsiasi sotto-categoria che contiene la parola "soldi"
+        condizione_cat = df_storico["categoria"].astype(str).str.lower().isin(["prestiti", "rientro prestiti"])
+        condizione_sottocat = df_storico["sotto categoria"].astype(str).str.lower().str.contains("soldi ")
+        
+        df_prestiti = df_storico[condizione_cat | condizione_sottocat].copy()
 
         if df_prestiti.empty:
             st.success("Nessun prestito registrato finora. Tutto in regola!")
         else:
-            # 1. FUNZIONE ESTRAZIONE NOMI AGGIORNATA
+            # 2. FUNZIONE ESTRAZIONE NOMI UNIVERSALE
             def estrai_nome_persona(sotto_cat):
                 testo = str(sotto_cat).lower().strip()
-                if testo.startswith("prestito soldi "): 
-                    return testo.replace("prestito soldi ", "").title()
-                elif testo.startswith("soldi "): 
-                    return testo.replace("soldi ", "").title()
-                elif "beni/servizi - soldi " in testo: 
-                    return testo.split("beni/servizi - soldi ")[-1].title()
-                elif testo.startswith("azzeramento soldi "): 
-                    return testo.replace("azzeramento soldi ", "").title()
-                elif testo.startswith("azzeramento prestiti "): 
-                    return testo.replace("azzeramento prestiti ", "").title()
+                
+                # Trucco infallibile: taglia la frase a "soldi " e prende quello che c'è dopo
+                if "soldi " in testo:
+                    return testo.split("soldi ")[1].strip().title()
+                elif testo.startswith("azzeramento prestiti "):
+                    return testo.replace("azzeramento prestiti ", "", 1).strip().title()
+                    
                 return "Sconosciuto"
 
             df_prestiti["persona"] = df_prestiti["sotto categoria"].apply(estrai_nome_persona)
-            
-            # Escludiamo eventuali errori di battitura non riconosciuti
             df_prestiti = df_prestiti[df_prestiti["persona"] != "Sconosciuto"]
             
-            # 1.5 MOTORE INTELLIGENTE PER IL CALCOLO DEI SEGNI
+            # 3. MOTORE CALCOLO SEGNI (SEMPLIFICATO AL MASSIMO)
             def calcola_variazione(row):
-                sotto_cat = str(row["sotto categoria"]).lower().strip()
-                categoria = str(row["categoria"]).lower().strip()
-                
-                # GESTIONE AZZERAMENTI E RIENTRI
-                if sotto_cat.startswith("azzeramento") or categoria == "rientro prestiti":
-                    return float(row["uscite"]) - float(row["entrate"])
-                    
-                # GESTIONE PRESTITI NORMALI E CONDIVISI
-                uscite = float(row["uscite"])
-                if sotto_cat.startswith("prestito soldi "):
-                    # Li hai prestati TU -> Il tuo credito sale (+)
-                    return uscite
-                elif sotto_cat.startswith("soldi ") or "beni/servizi - soldi " in sotto_cat:
-                    # Li hanno anticipati LORO -> Il tuo debito sale (-)
-                    return -uscite
-                    
-                return float(row["uscite"]) - float(row["entrate"])
+                # Il database ha già i segni corretti nella colonna 'importo', prendiamo solo quello!
+                return float(row.get("importo", 0.0))
 
-            # Applichiamo la nuova regola matematica riga per riga
             df_prestiti["variazione_credito"] = df_prestiti.apply(calcola_variazione, axis=1)
             
-            # 2. MOTORE DI CALCOLO SALDI CON CHECKPOINT
+            # 4. MOTORE DI CALCOLO SALDI CON CHECKPOINT
             persone = df_prestiti["persona"].unique()
             saldi_finali = {}
             
             for persona in persone:
+                # Corrispondenza esatta col == per evitare che "Peppe" includa le righe di "Peppe Api"
                 df_persona = df_prestiti[df_prestiti["persona"] == persona]
                 
                 # Cerco se c'è un "checkpoint" di azzeramento (copre sia "azzeramento soldi" che "azzeramento prestiti")
@@ -581,7 +563,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                     
                 saldi_finali[persona] = saldo
 
-            # 3. PANORAMICA GLOBALE A COLPO D'OCCHIO
+            # 5. PANORAMICA GLOBALE A COLPO D'OCCHIO
             totale_da_ricevere = sum(s for s in saldi_finali.values() if s > 0)
             totale_da_dare = sum(abs(s) for s in saldi_finali.values() if s < 0)
             
@@ -592,7 +574,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
             
             st.divider()
 
-            # 4. DETTAGLIO FILTRABILE PER PERSONA
+            # 6. DETTAGLIO FILTRABILE PER PERSONA
             st.markdown("### 👤 Dettaglio per Persona")
             lista_persone = sorted(list(persone))
             persone_selezionate = st.multiselect(
@@ -613,7 +595,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                 else:
                     st.info(f"⚪ **{nome}**: Siete in pari (0.00 €)")
                     
-            # 5. STORICO MOVIMENTI
+            # 7. STORICO MOVIMENTI
             st.subheader("Storico dei Movimenti")
             
             # Filtra la tabella in base alle persone selezionate sopra
