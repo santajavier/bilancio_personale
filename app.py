@@ -734,7 +734,7 @@ elif pagina_scelta == "📝 Registro Transazioni":
                 
                 # Azione: MODIFICA
                 if btn_salva:
-                    flusso_orig = riga_dati["flusso"]
+                    flusso_orig = str(riga_dati["flusso"])
                     uscite_calc, entrate_calc, giroconti_calc = 0.0, 0.0, 0.0
                     
                     # Ricalcoliamo il segno corretto dell'importo in base al flusso originale
@@ -750,22 +750,34 @@ elif pagina_scelta == "📝 Registro Transazioni":
                     
                     importo_netto = -uscite_calc + entrate_calc + giroconti_calc
                     
-                    # Creiamo il nuovo pacchetto mantenendo Categoria e Sottocategoria originali
+                    # 🔴 LA MAGIA È QUI: formattiamo tutto come stringhe col punto decimale!
                     riga_aggiornata = [
-                        nuova_data.strftime("%d/%m/%Y"), nuova_data.year, nuova_data.month,
-                        uscite_calc, entrate_calc, giroconti_calc, importo_netto,
-                        nuova_tipologia, riga_dati["sotto categoria"], nuova_desc, riga_dati["categoria"], flusso_orig
+                        nuova_data.strftime("%d/%m/%Y"), 
+                        str(nuova_data.year), 
+                        str(nuova_data.month),
+                        f"{uscite_calc:.2f}", 
+                        f"{entrate_calc:.2f}", 
+                        f"{giroconti_calc:.2f}", 
+                        f"{importo_netto:.2f}",
+                        nuova_tipologia, 
+                        str(riga_dati["sotto categoria"]), 
+                        nuova_desc, 
+                        str(riga_dati["categoria"]), 
+                        flusso_orig
                     ]
                     
                     try:
-                        # Riscriviamo solo la riga specifica
-                        tab_storico.update(values=[riga_aggiornata], range_name=f"A{riga_gs}:L{riga_gs}")
+                        # Riscriviamo la riga aggiungendo value_input_option='RAW'
+                        tab_storico.update(
+                            values=[riga_aggiornata], 
+                            range_name=f"A{riga_gs}:L{riga_gs}", 
+                            value_input_option='RAW'
+                        )
                         st.success("✅ Modifica salvata con successo!")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore durante il salvataggio: {e}")
-
         st.divider()
 
         # 2. TABELLA VISUALE DEL REGISTRO COMPLETO
