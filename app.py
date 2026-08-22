@@ -656,7 +656,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                         .sort_values(by="data_dt", ascending=False), 
                         use_container_width=True
                     )
-                    
+
 # ==========================================
 #      PAGINA 4: REGISTRO TRANSAZIONI
 # ==========================================
@@ -722,49 +722,49 @@ elif pagina_scelta == "📝 Registro Transazioni":
                 with c2:
                     btn_elimina = st.form_submit_button("🗑️ Elimina Definitivamente")
                     
-            # Azione: ELIMINA
-            if btn_elimina:
-                try:
-                    tab_storico.delete_rows(riga_gs)
-                    st.success("✅ Transazione eliminata con successo!")
-                    st.cache_data.clear() # Svuota la cache per aggiornare i grafici
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante l'eliminazione: {e}")
-            
-            # Azione: MODIFICA
-            if btn_salva:
-                flusso_orig = riga_dati["flusso"]
-                uscite_calc, entrate_calc, giroconti_calc = 0.0, 0.0, 0.0
+                # Azione: ELIMINA
+                if btn_elimina:
+                    try:
+                        tab_storico.delete_rows(riga_gs)
+                        st.success("✅ Transazione eliminata con successo!")
+                        st.cache_data.clear() # Svuota la cache per aggiornare i grafici
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore durante l'eliminazione: {e}")
                 
-                # Ricalcoliamo il segno corretto dell'importo in base al flusso originale
-                if flusso_orig == "Pagamento":
-                    uscite_calc = nuovo_importo
-                elif flusso_orig == "Incasso":
-                    entrate_calc = nuovo_importo
-                elif flusso_orig == "Giroconto":
-                    if float(riga_dati["importo"]) < 0:
-                        giroconti_calc = -nuovo_importo
-                    else:
-                        giroconti_calc = nuovo_importo
-                
-                importo_netto = -uscite_calc + entrate_calc + giroconti_calc
-                
-                # Creiamo il nuovo pacchetto mantenendo Categoria e Sottocategoria originali
-                riga_aggiornata = [
-                    nuova_data.strftime("%d/%m/%Y"), nuova_data.year, nuova_data.month,
-                    uscite_calc, entrate_calc, giroconti_calc, importo_netto,
-                    nuova_tipologia, riga_dati["sotto categoria"], nuova_desc, riga_dati["categoria"], flusso_orig
-                ]
-                
-                try:
-                    # Riscriviamo solo la riga specifica
-                    tab_storico.update(values=[riga_aggiornata], range_name=f"A{riga_gs}:L{riga_gs}")
-                    st.success("✅ Modifica salvata con successo!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante il salvataggio: {e}")
+                # Azione: MODIFICA
+                if btn_salva:
+                    flusso_orig = riga_dati["flusso"]
+                    uscite_calc, entrate_calc, giroconti_calc = 0.0, 0.0, 0.0
+                    
+                    # Ricalcoliamo il segno corretto dell'importo in base al flusso originale
+                    if flusso_orig == "Pagamento":
+                        uscite_calc = nuovo_importo
+                    elif flusso_orig == "Incasso":
+                        entrate_calc = nuovo_importo
+                    elif flusso_orig == "Giroconto":
+                        if float(riga_dati["importo"]) < 0:
+                            giroconti_calc = -nuovo_importo
+                        else:
+                            giroconti_calc = nuovo_importo
+                    
+                    importo_netto = -uscite_calc + entrate_calc + giroconti_calc
+                    
+                    # Creiamo il nuovo pacchetto mantenendo Categoria e Sottocategoria originali
+                    riga_aggiornata = [
+                        nuova_data.strftime("%d/%m/%Y"), nuova_data.year, nuova_data.month,
+                        uscite_calc, entrate_calc, giroconti_calc, importo_netto,
+                        nuova_tipologia, riga_dati["sotto categoria"], nuova_desc, riga_dati["categoria"], flusso_orig
+                    ]
+                    
+                    try:
+                        # Riscriviamo solo la riga specifica
+                        tab_storico.update(values=[riga_aggiornata], range_name=f"A{riga_gs}:L{riga_gs}")
+                        st.success("✅ Modifica salvata con successo!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore durante il salvataggio: {e}")
 
         st.divider()
 
