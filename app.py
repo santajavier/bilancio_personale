@@ -261,15 +261,16 @@ if pagina_scelta == "💸 Nuova Transazione":
         permesso_zero = False
         if flusso_input != "Giroconto":
             voce_scelta = str(sottocat_input).lower().strip()
-            if voce_scelta.startswith("azzeramento soldi") or voce_scelta == "saldo manuale":
+            # Consenti importi negativi o zero per azzeramenti e allineamenti
+            if voce_scelta.startswith("azzeramento soldi") or voce_scelta == "saldo manuale" or flusso_input == "Allineamento patrimonio":
                 permesso_zero = True
 
         errore_quote = False
         if spesa_condivisa and (abs((quota_mia + sum(quote_altri.values())) - importo_digitato) > 0.001):
             errore_quote = True
 
-        if importo_digitato <= 0 and not permesso_zero:
-            st.warning("⚠️ Inserisci un importo maggiore di zero (lo 0 è consentito solo per azzeramenti e saldi manuali)!")
+        if importo_digitato == 0 and not permesso_zero:
+            st.warning("⚠️ Inserisci un importo diverso da zero (lo 0 è consentito solo per azzeramenti e saldi manuali)!")
         elif flusso_input == "Giroconto" and conto_partenza == conto_destinazione:
             st.warning("⚠️ Il conto di partenza e destinazione non possono essere uguali!")
         elif errore_quote:
@@ -307,9 +308,21 @@ if pagina_scelta == "💸 Nuova Transazione":
                         })
             else:
                 imp_pulito = round(float(importo_digitato), 2)
-                uscite_calc = imp_pulito if flusso_input == "Pagamento" else 0.0
-                entrate_calc = imp_pulito if flusso_input == "Incasso" else 0.0
-                importo_netto = -uscite_calc + entrate_calc
+                
+                # --- NUOVA LOGICA DEI FLUSSI ---
+                uscite_calc, entrate_calc = 0.0, 0.0
+                
+                if flusso_input == "Pagamento":
+                    uscite_calc = imp_pulito
+                    importo_netto = -imp_pulito
+                elif flusso_input == "Incasso":
+                    entrate_calc = imp_pulito
+                    importo_netto = imp_pulito
+                elif flusso_input == "Allineamento patrimonio":
+                    # L'allineamento non tocca uscite ed entrate (così non sballa i grafici)
+                    importo_netto = imp_pulito
+                else:
+                    importo_netto = 0.0
                 
                 righe_da_salvare = [{
                     "data": data_input.strftime("%d/%m/%Y"), "anno": anno_calc, "mese": mese_calc, 
@@ -340,7 +353,7 @@ if pagina_scelta == "💸 Nuova Transazione":
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ Errore durante il salvataggio: {e}")
-                    
+                                
 # ==========================================
 #      PAGINA 2: DASHBOARD STATISTICHE
 # ==========================================
