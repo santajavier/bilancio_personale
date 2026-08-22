@@ -490,6 +490,7 @@ elif pagina_scelta == "📊 Dashboard Statistiche":
             
         colonne_vista = [c for c in ["data", "flusso", "categoria", "sotto categoria", "descrizione", "tipologia", "importo"] if c in df_mostra.columns]
         st.dataframe(df_mostra.sort_values(by="data_dt", ascending=False)[colonne_vista], use_container_width=True)
+
 # ==========================================
 #       PAGINA 3: GESTIONE PRESTITI
 # ==========================================
@@ -502,113 +503,160 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
     if df_storico.empty:
         st.info("Nessun dato presente nel database.")
     else:
-        # 1. FILTRO AMPLIATO
-        # Prendiamo la categoria "prestiti" OPPURE qualsiasi sotto-categoria che contiene la parola "soldi"
-        condizione_cat = df_storico["categoria"].astype(str).str.lower().isin(["prestiti", "rientro prestiti"])
-        condizione_sottocat = df_storico["sotto categoria"].astype(str).str.lower().str.contains("soldi ")
+        # 1. FILTRO AMPLIATO E PRECISO SULLE CATEGORIE
+        categorie_valide = ["prestiti", "rientro prestiti", "entrate varie"]
+        # Usiamo strip() per evitare errori se hai inserito spazi alla fine tipo "rientro prestiti "
+        condizione_cat = df_storico["categoria"].astype(str).str.lower().str.strip().isin(categorie_valide)
         
-        df_prestiti = df_storico[condizione_cat | condizione_sottocat].copy()
+        df_prestiti = df_storico[condizione_cat].copy()
 
         if df_prestiti.empty:
             st.success("Nessun prestito registrato finora. Tutto in regola!")
         else:
-            # 2. FUNZIONE ESTRAZIONE NOMI UNIVERSALE
+            # 2. FUNZIONE ESTRAZIONE NOMI RIGOROSA
             def estrai_nome_persona(sotto_cat):
                 testo = str(sotto_cat).lower().strip()
                 
-                # Trucco infallibile: taglia la frase a "soldi " e prende quello che c'è dopo
-                if "soldi " in testo:
-                    return testo.split("soldi ")[1].strip().title()
+                # Accetta SOLO diciture esatte per evitare "soldi laurea" ecc.
+                if testo.startswith("prestito soldi "):
+                    return testo.replace("prestito soldi ", "", 1).strip().title()
+                elif testo.startswith("soldi "):
+                    return testo.replace("soldi ", "", 1).strip().title()
+                elif "beni/servizi - soldi " in testo:
+                    return testo.split("beni/servizi - soldi ")[-1].strip().title()
                 elif testo.startswith("azzeramento prestiti "):
                     return testo.replace("azzeramento prestiti ", "", 1).strip().title()
-                    
+                elif testo.startswith("azzeramento soldi "):
+                    return testo.replace("azzeramento soldi ", "", 1).strip().title()
+                
+                # Se non è una delle frasi sopra, scarta la riga
                 return "Sconosciuto"
 
             df_prestiti["persona"] = df_prestiti["sotto categoria"].apply(estrai_nome_persona)
+            
+            # Escludiamo le righe che non c'entrano coi prestiti (es. regali di laurea, soldi trovati)
             df_prestiti = df_prestiti[df_prestiti["persona"] != "Sconosciuto"]
             
-            # 3. MOTORE CALCOLO SEGNI (SEMPLIFICATO AL MASSIMO)
-            def calcola_variazione(row):
-                # Il database ha già i segni corretti nella colonna 'importo', prendiamo solo quello!
-                return float(row.get("importo", 0.0))
+            if df_prestiti.empty:
+                st.info("Nessun movimento di prestito valido trovato.")
+            else:
+                # 3. MOTORE CALCOLO SEGNI (Affidato al Database)
+                def calcola_variazione(row):
+                    return float(row.get("importo", 0.0))
 
-            df_prestiti["variazione_credito"] = df_prestiti.apply(calcola_variazione, axis=1)
-            
-            # 4. MOTORE DI CALCOLO SALDI CON CHECKPOINT
-            persone = df_prestiti["persona"].unique()
-            saldi_finali = {}
-            
-            for persona in persone:
-                # Corrispondenza esatta col == per evitare che "Peppe" includa le righe di "Peppe Api"
-                df_persona = df_prestiti[df_prestiti["persona"] == persona]
+                df_prestiti["variazione_credito"] = df_prestiti.apply(calcola_variazione, axis=1)
                 
-                # Cerco se c'è un "checkpoint" di azzeramento (copre sia "azzeramento soldi" che "azzeramento prestiti")
-                condizione_azzeramento = df_persona["sotto categoria"].astype(str).str.lower().str.startswith("azzeramento")
-                df_azzeramento = df_persona[condizione_azzeramento]
+                st.divider()
                 
-                if not df_azzeramento.empty:
-                    # Prendo il checkpoint più recente
-                    ultima_rettifica = df_azzeramento.sort_values(by="data_dt", ascending=False).iloc[0]
-                    data_rettifica = ultima_rettifica["data_dt"]
+                # --- FILTRI DI ANALISI (TEMPO E ABBONAMENTI) ---
+                st.markdown("### 🔍 Analisi Abbonamenti e Periodo")
+                col_f1, col_f2 = st.columns(2)
+                
+                with col_f1:
+                    min_date = df_prestiti["data_dt"].min().date()
+                    max_date = df_prestiti["data_dt"].max().date()
+                    filtro_date = st.date_input("Filtro Temporale:", value=(min_date, max_date), min_value=min_date, max_value=max_date)
                     
-                    # Il nuovo punto di partenza diventa l'importo dell'azzeramento
-                    saldo_base = ultima_rettifica["variazione_credito"] 
+                with col_f2:
+                    filtro_causale = st.text_input("Filtra per Abbonamento/Causale (es. 'spotify'):").strip().lower()
+
+                # Applichiamo i filtri scelti dall'utente
+                df_filtrato = df_prestiti.copy()
+                
+                if len(filtro_date) == 2:
+                    start_date, end_date = filtro_date
+                    df_filtrato = df_filtrato[(df_filtrato["data_dt"].dt.date >= start_date) & (df_filtrato["data_dt"].dt.date <= end_date)]
                     
-                    # Sommo solo le transazioni successive al checkpoint
-                    df_successive = df_persona[(df_persona["data_dt"] > data_rettifica) & (~condizione_azzeramento)]
-                    saldo = saldo_base + df_successive["variazione_credito"].sum()
+                if filtro_causale:
+                    df_filtrato = df_filtrato[df_filtrato["descrizione"].astype(str).str.lower().str.contains(filtro_causale)]
+                
+                if df_filtrato.empty:
+                    st.warning("Nessuna transazione trovata con questi filtri.")
                 else:
-                    # Nessun checkpoint: calcolo lo storico completo
-                    saldo = df_persona["variazione_credito"].sum()
+                    # 4. MOTORE DI CALCOLO SALDI
+                    persone = df_filtrato["persona"].unique()
+                    saldi_finali = {}
                     
-                saldi_finali[persona] = saldo
+                    for persona in persone:
+                        df_persona = df_filtrato[df_filtrato["persona"] == persona]
+                        
+                        # Se stiamo filtrando per capire il costo di Spotify o un periodo preciso, saltiamo gli azzeramenti
+                        if filtro_causale or (len(filtro_date) == 2 and (start_date != min_date or end_date != max_date)):
+                            saldo = df_persona["variazione_credito"].sum()
+                        else:
+                            condizione_azzeramento = df_persona["sotto categoria"].astype(str).str.lower().str.startswith("azzeramento")
+                            df_azzeramento = df_persona[condizione_azzeramento]
+                            
+                            if not df_azzeramento.empty:
+                                ultima_rettifica = df_azzeramento.sort_values(by="data_dt", ascending=False).iloc[0]
+                                data_rettifica = ultima_rettifica["data_dt"]
+                                saldo_base = ultima_rettifica["variazione_credito"] 
+                                df_successive = df_persona[(df_persona["data_dt"] > data_rettifica) & (~condizione_azzeramento)]
+                                saldo = saldo_base + df_successive["variazione_credito"].sum()
+                            else:
+                                saldo = df_persona["variazione_credito"].sum()
+                            
+                        saldi_finali[persona] = saldo
 
-            # 5. PANORAMICA GLOBALE A COLPO D'OCCHIO
-            totale_da_ricevere = sum(s for s in saldi_finali.values() if s > 0)
-            totale_da_dare = sum(abs(s) for s in saldi_finali.values() if s < 0)
-            
-            st.markdown("### 🌍 Situazione Globale")
-            col_tot1, col_tot2 = st.columns(2)
-            col_tot1.metric("🟢 Totale da Ricevere", f"{totale_da_ricevere:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
-            col_tot2.metric("🔴 Totale da Dare", f"{totale_da_dare:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
-            
-            st.divider()
-
-            # 6. DETTAGLIO FILTRABILE PER PERSONA
-            st.markdown("### 👤 Dettaglio per Persona")
-            lista_persone = sorted(list(persone))
-            persone_selezionate = st.multiselect(
-                "Filtra per persona (lascia vuoto per vederli tutti):", 
-                options=lista_persone, 
-                default=[]
-            )
-            
-            # Stampa i saldi di ogni persona
-            for nome, saldo in saldi_finali.items():
-                if persone_selezionate and nome not in persone_selezionate:
-                    continue
+                    # 5. PANORAMICA GLOBALE FILTRATA
+                    totale_da_ricevere = sum(s for s in saldi_finali.values() if s < 0)
+                    totale_da_dare = sum(s for s in saldi_finali.values() if s > 0)
                     
-                if saldo > 0.01:
-                    st.error(f"🔴 Devi a **{nome}**: **{abs(saldo):,.2f} €**")
-                elif saldo < -0.01:
-                    st.success(f"🟢 **{nome}** ti deve restituire: **{abs(saldo):,.2f} €**")
-                else:
-                    st.info(f"⚪ **{nome}**: Siete in pari (0.00 €)")
+                    bilancio_netto = totale_da_ricevere + totale_da_dare
                     
-            # 7. STORICO MOVIMENTI
-            st.subheader("Storico dei Movimenti")
-            
-            # Filtra la tabella in base alle persone selezionate sopra
-            df_mostra_storico = df_prestiti.copy()
-            if persone_selezionate:
-                df_mostra_storico = df_mostra_storico[df_mostra_storico["persona"].isin(persone_selezionate)]
-                
-            st.dataframe(
-                df_mostra_storico[["data_dt", "persona", "categoria", "sotto categoria", "descrizione", "importo"]]
-                .sort_values(by="data_dt", ascending=False), 
-                use_container_width=True
-            )
+                    col_tot1, col_tot2, col_tot3 = st.columns(3)
+                    col_tot1.metric("🟢 Totale da Ricevere", f"{abs(totale_da_ricevere):,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+                    col_tot2.metric("🔴 Totale da Dare", f"{totale_da_dare:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+                    col_tot3.metric("📊 Bilancio Netto", f"{bilancio_netto:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."), delta="Perdita" if bilancio_netto > 0 else "Profitto" if bilancio_netto < 0 else "In Pari", delta_color="inverse")
+                    
+                    st.divider()
 
+                    # 6. DETTAGLIO FILTRABILE PER PERSONA E CALCOLO GRUPPO
+                    st.markdown("### 👤 Dettaglio per Persona")
+                    lista_persone = sorted(list(persone))
+                    persone_selezionate = st.multiselect(
+                        "Filtra per persona (lascia vuoto per vederli tutti):", 
+                        options=lista_persone, 
+                        default=[]
+                    )
+                    
+                    # --- NOVITÀ: Calcolo totale solo per le persone selezionate ---
+                    if persone_selezionate:
+                        totale_selezionati = sum(saldi_finali[nome] for nome in persone_selezionate if nome in saldi_finali)
+                        st.markdown("#### 🧮 Totale Persone Selezionate")
+                        if totale_selezionati > 0.01:
+                            st.error(f"🔴 Devi a questo gruppo un totale di: **{abs(totale_selezionati):,.2f} €**")
+                        elif totale_selezionati < -0.01:
+                            st.success(f"🟢 Questo gruppo ti deve un totale di: **{abs(totale_selezionati):,.2f} €**")
+                        else:
+                            st.info("⚪ Siete in pari con il gruppo selezionato (0.00 €)")
+                        st.markdown("---")
+                    
+                    # Stampa i saldi singoli
+                    for nome, saldo in saldi_finali.items():
+                        if persone_selezionate and nome not in persone_selezionate:
+                            continue
+                            
+                        if saldo > 0.01:
+                            st.error(f"🔴 Devi a **{nome}**: **{abs(saldo):,.2f} €**")
+                        elif saldo < -0.01:
+                            st.success(f"🟢 **{nome}** ti deve restituire: **{abs(saldo):,.2f} €**")
+                        else:
+                            st.info(f"⚪ **{nome}**: Siete in pari (0.00 €)")
+                            
+                    # 7. STORICO MOVIMENTI
+                    st.subheader("Storico dei Movimenti")
+                    
+                    df_mostra_storico = df_filtrato.copy()
+                    if persone_selezionate:
+                        df_mostra_storico = df_mostra_storico[df_mostra_storico["persona"].isin(persone_selezionate)]
+                        
+                    st.dataframe(
+                        df_mostra_storico[["data_dt", "persona", "categoria", "sotto categoria", "descrizione", "importo"]]
+                        .sort_values(by="data_dt", ascending=False), 
+                        use_container_width=True
+                    )
+                    
 # ==========================================
 #      PAGINA 4: REGISTRO TRANSAZIONI
 # ==========================================
