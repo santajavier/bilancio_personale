@@ -589,9 +589,9 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                     continue
                     
                 if saldo > 0.01:
-                    st.success(f"🟢 **{nome}** ti deve restituire: **{saldo:,.2f} €**")
-                elif saldo < -0.01:
                     st.error(f"🔴 Devi a **{nome}**: **{abs(saldo):,.2f} €**")
+                elif saldo < -0.01:
+                    st.success(f"🟢 **{nome}** ti deve restituire: **{abs(saldo):,.2f} €**")
                 else:
                     st.info(f"⚪ **{nome}**: Siete in pari (0.00 €)")
                     
@@ -608,7 +608,7 @@ elif pagina_scelta == "🤝 Gestione Prestiti":
                 .sort_values(by="data_dt", ascending=False), 
                 use_container_width=True
             )
-            
+
 # ==========================================
 #      PAGINA 4: REGISTRO TRANSAZIONI
 # ==========================================
