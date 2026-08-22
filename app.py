@@ -696,32 +696,32 @@ elif pagina_scelta == "📝 Registro Transazioni":
                 riga_gs = mappa_transazioni[transazione_selezionata]
                 riga_dati = df_storico[df_storico["gs_row"] == riga_gs].iloc[0]
             
-            if riga_dati["flusso"].lower() == "giroconto":
-                st.warning("💡 Stai modificando un Giroconto: ricordati che i giroconti hanno sempre 2 righe separate. Se elimini questa, ricordati di eliminare anche l'altra metà!")
-                
-            with st.form("form_modifica"):
-                st.write(f"Modifica dei dati (Riga Database: {riga_gs})")
-                
-                col_mod1, col_mod2 = st.columns(2)
-                with col_mod1:
-                    nuova_data = st.date_input("Data", riga_dati["data_dt"].date())
-                    # Manteniamo l'importo assoluto per non fare confusione con i segni
-                    nuovo_importo = st.number_input("Importo (€)", value=abs(float(riga_dati["importo"])), step=0.01)
-                with col_mod2:
-                    nuova_desc = st.text_input("Descrizione", str(riga_dati["descrizione"]))
+                if riga_dati["flusso"].lower() == "giroconto":
+                    st.warning("💡 Stai modificando un Giroconto: ricordati che i giroconti hanno sempre 2 righe separate. Se elimini questa, ricordati di eliminare anche l'altra metà!")
                     
-                    try:
-                        idx_tipo = lista_tipologie.index(riga_dati["tipologia"])
-                    except ValueError:
-                        idx_tipo = 0
-                    nuova_tipologia = st.selectbox("Conto/Metodo", lista_tipologie, index=idx_tipo)
+                with st.form("form_modifica"):
+                    st.write(f"Modifica dei dati (Riga Database: {riga_gs})")
                     
-                c1, c2 = st.columns(2)
-                with c1:
-                    btn_salva = st.form_submit_button("💾 Salva Modifiche")
-                with c2:
-                    btn_elimina = st.form_submit_button("🗑️ Elimina Definitivamente")
-                    
+                    col_mod1, col_mod2 = st.columns(2)
+                    with col_mod1:
+                        nuova_data = st.date_input("Data", riga_dati["data_dt"].date())
+                        # Manteniamo l'importo assoluto per non fare confusione con i segni
+                        nuovo_importo = st.number_input("Importo (€)", value=abs(float(riga_dati["importo"])), step=0.01)
+                    with col_mod2:
+                        nuova_desc = st.text_input("Descrizione", str(riga_dati["descrizione"]))
+                        
+                        try:
+                            idx_tipo = lista_tipologie.index(riga_dati["tipologia"])
+                        except ValueError:
+                            idx_tipo = 0
+                        nuova_tipologia = st.selectbox("Conto/Metodo", lista_tipologie, index=idx_tipo)
+                        
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        btn_salva = st.form_submit_button("💾 Salva Modifiche")
+                    with c2:
+                        btn_elimina = st.form_submit_button("🗑️ Elimina Definitivamente")
+                        
                 # Azione: ELIMINA
                 if btn_elimina:
                     try:
