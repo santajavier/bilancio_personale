@@ -816,7 +816,7 @@ elif pagina_scelta == "📝 Registro Transazioni":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore durante il salvataggio: {e}")
-                        
+
         st.divider()
 
         # 2. TABELLA VISUALE DEL REGISTRO COMPLETO
@@ -853,7 +853,7 @@ elif pagina_scelta == "📝 Registro Transazioni":
         st.dataframe(df_mostra.sort_values(by="data_dt", ascending=False)[colonne_vista], use_container_width=True)
 
 # ==========================================
-#      PAGINA 5: IMPOSTAZIONI
+#       PAGINA 5: IMPOSTAZIONI
 # ==========================================
 elif pagina_scelta == "⚙️ Impostazioni":
     st.title("Bilancio Personale")
@@ -897,7 +897,14 @@ elif pagina_scelta == "⚙️ Impostazioni":
             if se_esistenti:
                 st.caption("Attuali: " + ", ".join(se_esistenti[:5]) + "...")
         with col3:
-            nuovo_flusso = st.selectbox("Flusso:", ["Pagamento", "Incasso", "Giroconto"])
+            # --- MODIFICA QUI ---
+            # Estrae la lista dei flussi in tempo reale dal database (se esiste) o usa la tua lista_flussi_dinamici
+            if not df_elenchi.empty and "Flusso" in df_elenchi.columns:
+                flussi_aggiornati = sorted(df_elenchi["Flusso"].dropna().unique().tolist())
+            else:
+                flussi_aggiornati = lista_flussi_dinamici
+                
+            nuovo_flusso = st.selectbox("Flusso:", flussi_aggiornati)
             
         btn_cat = st.form_submit_button("➕ Aggiungi al Dizionario")
         
