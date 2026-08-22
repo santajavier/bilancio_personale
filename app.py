@@ -708,30 +708,49 @@ elif pagina_scelta == "📝 Registro Transazioni":
             transazione_selezionata = st.selectbox("Cerca transazione:", lista_opzioni)
             
             if transazione_selezionata != "-- Seleziona transazione --":
-                # Recuperiamo la riga esatta tramite la nostra mappa
                 riga_gs = mappa_transazioni[transazione_selezionata]
                 riga_dati = df_storico[df_storico["gs_row"] == riga_gs].iloc[0]
             
-                if riga_dati["flusso"].lower() == "giroconto":
-                    st.warning("💡 Stai modificando un Giroconto: ricordati che i giroconti hanno sempre 2 righe separate. Se elimini questa, ricordati di eliminare anche l'altra metà!")
-                    
+                if str(riga_dati["flusso"]).lower() == "giroconto":
+                    st.warning("💡 Stai modificando un Giroconto: ricordati che i giroconti hanno sempre 2 righe separate. Se modifichi l'importo qui, ricordati di modificare anche l'altra metà per far quadrare i conti!")
+                
+                # --- PREPARIAMO LE LISTE PER I MENU A TENDINA ---
+                lista_flussi = sorted([str(x) for x in df_storico["flusso"].dropna().unique() if str(x).strip()])
+                lista_categorie = sorted([str(x) for x in df_storico["categoria"].dropna().unique() if str(x).strip()])
+                lista_sottocat = sorted([str(x) for x in df_storico["sotto categoria"].dropna().unique() if str(x).strip()])
+                lista_tip = sorted([str(x) for x in df_storico["tipologia"].dropna().unique() if str(x).strip()])
+
+                # Troviamo gli indici attuali (se non li trova, mette 0 di default)
+                def trova_indice(lista, valore):
+                    try: return lista.index(str(valore))
+                    except ValueError: return 0
+                
                 with st.form("form_modifica"):
                     st.write(f"Modifica dei dati (Riga Database: {riga_gs})")
                     
-                    col_mod1, col_mod2 = st.columns(2)
-                    with col_mod1:
+                    # Prima riga di campi
+                    c_data, c_imp, c_conto = st.columns([1, 1, 1.5])
+                    with c_data:
                         nuova_data = st.date_input("Data", riga_dati["data_dt"].date())
-                        # Manteniamo l'importo assoluto per non fare confusione con i segni
-                        nuovo_importo = st.number_input("Importo (€)", value=abs(float(riga_dati["importo"])), step=0.01)
-                    with col_mod2:
-                        nuova_desc = st.text_input("Descrizione", str(riga_dati["descrizione"]))
+                    with c_imp:
+                        # RIMOSSO l'abs() per permettere numeri negativi negli allineamenti
+                        nuovo_importo = st.number_input("Importo (€)", value=float(riga_dati["importo"]), step=0.01)
+                    with c_conto:
+                        nuova_tipologia = st.selectbox("Conto / Metodo", lista_tip, index=trova_indice(lista_tip, riga_dati["tipologia"]))
+                    
+                    # Seconda riga di campi (TUTTO MODIFICABILE ORA)
+                    c_flusso, c_cat, c_subcat = st.columns(3)
+                    with c_flusso:
+                        nuovo_flusso = st.selectbox("Flusso", lista_flussi, index=trova_indice(lista_flussi, riga_dati["flusso"]))
+                    with c_cat:
+                        nuova_cat = st.selectbox("Categoria", lista_categorie, index=trova_indice(lista_categorie, riga_dati["categoria"]))
+                    with c_subcat:
+                        nuova_subcat = st.selectbox("Sotto Categoria", lista_sottocat, index=trova_indice(lista_sottocat, riga_dati["sotto categoria"]))
                         
-                        try:
-                            idx_tipo = lista_tipologie.index(riga_dati["tipologia"])
-                        except ValueError:
-                            idx_tipo = 0
-                        nuova_tipologia = st.selectbox("Conto/Metodo", lista_tipologie, index=idx_tipo)
+                    # Terza riga di campi
+                    nuova_desc = st.text_input("Descrizione", str(riga_dati["descrizione"]))
                         
+                    # Pulsanti
                     c1, c2 = st.columns(2)
                     with c1:
                         btn_salva = st.form_submit_button("💾 Salva Modifiche")
@@ -743,30 +762,34 @@ elif pagina_scelta == "📝 Registro Transazioni":
                     try:
                         tab_storico.delete_rows(riga_gs)
                         st.success("✅ Transazione eliminata con successo!")
-                        st.cache_data.clear() # Svuota la cache per aggiornare i grafici
+                        st.cache_data.clear() 
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore durante l'eliminazione: {e}")
                 
                 # Azione: MODIFICA
                 if btn_salva:
-                    flusso_orig = str(riga_dati["flusso"])
                     uscite_calc, entrate_calc, giroconti_calc = 0.0, 0.0, 0.0
+                    importo_netto = 0.0
                     
-                    # Ricalcoliamo il segno corretto dell'importo in base al flusso originale
-                    if flusso_orig == "Pagamento":
-                        uscite_calc = nuovo_importo
-                    elif flusso_orig == "Incasso":
-                        entrate_calc = nuovo_importo
-                    elif flusso_orig == "Giroconto":
+                    # LA NUOVA LOGICA MATEMATICA BASATA SUL FLUSSO SCELTO NEL MENU
+                    if nuovo_flusso == "Pagamento":
+                        uscite_calc = abs(nuovo_importo) # Forza positivo nella colonna uscite
+                        importo_netto = -abs(nuovo_importo) # Forza negativo nel netto
+                    elif nuovo_flusso == "Incasso":
+                        entrate_calc = abs(nuovo_importo)
+                        importo_netto = abs(nuovo_importo)
+                    elif str(nuovo_flusso).lower() == "giroconto":
                         if float(riga_dati["importo"]) < 0:
-                            giroconti_calc = -nuovo_importo
+                            giroconti_calc = -abs(nuovo_importo)
                         else:
-                            giroconti_calc = nuovo_importo
+                            giroconti_calc = abs(nuovo_importo)
+                        importo_netto = giroconti_calc
+                    elif "allineamento" in str(nuovo_flusso).lower(): # Copre sia "Allineamento saldo" che "patrimonio"
+                        # Rispetta il segno che hai inserito (positivo o negativo) e non tocca entrate/uscite
+                        importo_netto = nuovo_importo
                     
-                    importo_netto = -uscite_calc + entrate_calc + giroconti_calc
-                    
-                    # 🔴 LA MAGIA È QUI: formattiamo tutto come stringhe col punto decimale!
+                    # Pacchetto dati da spedire a Google Sheets (formattato perfettamente come testo)
                     riga_aggiornata = [
                         nuova_data.strftime("%d/%m/%Y"), 
                         str(nuova_data.year), 
@@ -776,14 +799,13 @@ elif pagina_scelta == "📝 Registro Transazioni":
                         f"{giroconti_calc:.2f}", 
                         f"{importo_netto:.2f}",
                         nuova_tipologia, 
-                        str(riga_dati["sotto categoria"]), 
+                        nuova_subcat, 
                         nuova_desc, 
-                        str(riga_dati["categoria"]), 
-                        flusso_orig
+                        nuova_cat, 
+                        nuovo_flusso
                     ]
                     
                     try:
-                        # Riscriviamo la riga aggiungendo value_input_option='RAW'
                         tab_storico.update(
                             values=[riga_aggiornata], 
                             range_name=f"A{riga_gs}:L{riga_gs}", 
@@ -794,6 +816,7 @@ elif pagina_scelta == "📝 Registro Transazioni":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore durante il salvataggio: {e}")
+                        
         st.divider()
 
         # 2. TABELLA VISUALE DEL REGISTRO COMPLETO
